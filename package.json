@@ -1,0 +1,19 @@
+{
+	"name": "gd-level-observer",
+	"version": "1.0.0",
+	"description": "Level observer for Geometry Dash",
+	"main": "index.js",
+	"scripts": {
+		"start": "node index.js"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"type": "module",
+	"dependencies": {
+		"discord.js": "^14.7.0",
+		"mysql2": "^2.3.3",
+		"node-fetch": "^3.3.0",
+		"sequelize": "^6.26.0"
+	}
+}

@@ -1,0 +1,23 @@
+{
+	"gd_server_search": {
+		"url": "http://www.boomlings.com/database/getGJLevels21.php",
+		"new_levels": {
+			"period": 15,
+			"random": 2,
+			"next_page": {
+				"period": 5,
+				"random": 1
+			}
+		},
+		"known_levels": {
+			"period": 60,
+			"random": 5,
+			"batch_size": 1000,
+			"next_page": {
+				"period": 15,
+				"random": 2
+			}
+		}
+	},
+	"initial_load": "test.json"
+}
