@@ -1,13 +1,13 @@
-import GDServer from './src/modules/GDSserver.js'
-import Creators from './src/models/Creators.js'
-import Songs from './src/models/Songs.js'
-import Levels from './src/models/Levels.js'
-import { syncModels } from './src/models.js'
+import GDServer from './modules/GDServer.js'
+import Creators from './models/Creators.js'
+import Songs from './models/Songs.js'
+import Levels from './models/Levels.js'
+import { syncModels } from './models.js'
 import { Op } from 'sequelize'
 import config from './config/settings.json' assert { type: 'json' }
-import { getRandomInterval, sleep, timestamp } from './src/scripts/functions.js'
-import Level from './src/class/Level.js'
-import Discord from './src/modules/Discord.js'
+import { getRandomInterval, sleep, timestamp } from './scripts/functions.js'
+import Level from './class/Level.js'
+import Discord from './modules/Discord.js'
 
 class LevelObserver {
 	log(...args) {
@@ -261,7 +261,7 @@ class LevelObserver {
 			if (config.initial_load) {
 				this.log('Loading initial levels from file...')
 				this.savedIDs = (
-					await import(`./src/data/local/${config.initial_load}`, {
+					await import(`../static/src/data/local/${config.initial_load}`, {
 						assert: { type: 'json' },
 					})
 				).default

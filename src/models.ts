@@ -1,4 +1,4 @@
-import env from '../config/dev.env.json' assert { type: 'json' }
+import env from './config/dev.env.json' assert { type: 'json' }
 import { Sequelize } from 'sequelize'
 
 const sequelize = new Sequelize(env.mysql.database, env.mysql.user, env.mysql.password, {

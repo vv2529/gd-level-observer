@@ -1,6 +1,6 @@
 import { tryCatch } from '../scripts/functions.js'
 import { SongsModel } from '../models.js'
-import officialSongs from '../data/officialSongs.json' assert { type: 'json' }
+import officialSongs from '../../static/data/officialSongs.json' assert { type: 'json' }
 
 export default class Songs {
 	static Model = SongsModel

@@ -1,5 +1,6 @@
 node_modules
 misc
+build
 src/data/local
-config/dev.env.json
-config/production.env.json
+src/config/dev.env.json
+src/config/production.env.json

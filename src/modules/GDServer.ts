@@ -1,4 +1,4 @@
-import config from '../../config/settings.json' assert { type: 'json' }
+import config from '../config/settings.json' assert { type: 'json' }
 import Level from '../class/Level.js'
 import { createRequestBody, httpFetch } from '../scripts/functions.js'
 
