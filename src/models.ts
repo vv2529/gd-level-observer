@@ -1,5 +1,17 @@
 import env from './config/dev.env.json' assert { type: 'json' }
-import { Sequelize } from 'sequelize'
+import {
+	Sequelize,
+	Model,
+	InferAttributes,
+	InferCreationAttributes,
+	CreationOptional,
+	NonAttribute,
+	DataTypes,
+	ForeignKey,
+} from 'sequelize'
+import Creator from './class/Creator.js'
+import Song from './class/Song.js'
+import Level from './class/Level.js'
 
 const sequelize = new Sequelize(env.mysql.database, env.mysql.user, env.mysql.password, {
 	host: env.mysql.host,
@@ -7,70 +19,92 @@ const sequelize = new Sequelize(env.mysql.database, env.mysql.user, env.mysql.pa
 	logging: false,
 })
 
-export const CreatorsModel = sequelize.define('Creator', {
+interface hasTimestamps {
+	createdAt?: CreationOptional<Date>
+	updatedAt?: CreationOptional<Date>
+}
+
+export interface SavedCreator
+	extends Model<InferAttributes<SavedCreator>, InferCreationAttributes<SavedCreator>>,
+		Creator,
+		hasTimestamps {}
+
+export interface SavedSong
+	extends Model<InferAttributes<SavedSong>, InferCreationAttributes<SavedSong>>,
+		Song,
+		hasTimestamps {}
+
+export interface SavedLevel
+	extends Model<InferAttributes<SavedLevel>, InferCreationAttributes<SavedLevel>>,
+		Level,
+		hasTimestamps {
+	playerID: ForeignKey<SavedCreator['playerID']>
+	songID: ForeignKey<SavedSong['id']>
+	author: NonAttribute<SavedCreator>
+	song: NonAttribute<SavedSong>
+}
+
+export const CreatorModel = sequelize.define<SavedCreator>('Creator', {
 	playerID: {
-		type: Sequelize.INTEGER,
+		type: DataTypes.INTEGER,
 		unique: true,
 		primaryKey: true,
 	},
-	name: Sequelize.STRING,
-	accountID: Sequelize.INTEGER,
+	name: DataTypes.STRING,
+	accountID: DataTypes.INTEGER,
 })
 
-export const SongsModel = sequelize.define('Song', {
+export const SongModel = sequelize.define<SavedSong>('Song', {
 	id: {
-		type: Sequelize.INTEGER,
+		type: DataTypes.INTEGER,
 		unique: true,
 		primaryKey: true,
 	},
-	name: Sequelize.STRING,
-	artistID: Sequelize.INTEGER,
-	artist: Sequelize.STRING,
-	size: Sequelize.STRING,
-	link: Sequelize.STRING,
-	videoID: Sequelize.STRING,
-	youtubeURL: Sequelize.STRING,
-	isVerified: Sequelize.BOOLEAN,
-	songPriority: Sequelize.INTEGER,
+	name: DataTypes.STRING,
+	artistID: DataTypes.INTEGER,
+	artist: DataTypes.STRING,
+	size: DataTypes.STRING,
+	link: DataTypes.STRING,
+	videoID: DataTypes.STRING,
+	youtubeURL: DataTypes.STRING,
+	isVerified: DataTypes.BOOLEAN,
+	songPriority: DataTypes.INTEGER,
 })
 
-export const LevelsModel = sequelize.define('Level', {
+export const LevelModel = sequelize.define<SavedLevel>('Level', {
 	id: {
-		type: Sequelize.INTEGER,
+		type: DataTypes.INTEGER,
 		unique: true,
 		primaryKey: true,
 	},
-	name: Sequelize.STRING,
+	name: DataTypes.STRING,
 	playerID: {
-		type: Sequelize.INTEGER,
-		references: {
-			model: CreatorsModel,
-			key: 'playerID',
-		},
+		type: DataTypes.NUMBER,
+		references: 'creators',
 	},
-	description: Sequelize.TEXT,
-	downloads: Sequelize.INTEGER,
-	likes: Sequelize.INTEGER,
-	cp: Sequelize.INTEGER,
-	stars: Sequelize.INTEGER,
-	coins: Sequelize.INTEGER,
-	verifiedCoins: Sequelize.BOOLEAN,
-	length: Sequelize.INTEGER,
-	demonDifficulty: Sequelize.INTEGER,
-	gameVersion: Sequelize.STRING,
-	version: Sequelize.INTEGER,
-	copiedID: Sequelize.INTEGER,
-	twoPlayer: Sequelize.BOOLEAN,
-	starsRequested: Sequelize.INTEGER,
-	objects: Sequelize.INTEGER,
+	description: DataTypes.TEXT,
+	downloads: DataTypes.INTEGER,
+	likes: DataTypes.INTEGER,
+	cp: DataTypes.INTEGER,
+	stars: DataTypes.INTEGER,
+	coins: DataTypes.INTEGER,
+	verifiedCoins: DataTypes.BOOLEAN,
+	length: DataTypes.INTEGER,
+	demonDifficulty: DataTypes.INTEGER,
+	gameVersion: DataTypes.STRING,
+	version: DataTypes.INTEGER,
+	copiedID: DataTypes.INTEGER,
+	twoPlayer: DataTypes.BOOLEAN,
+	starsRequested: DataTypes.INTEGER,
+	objects: DataTypes.INTEGER,
 	songID: {
-		type: Sequelize.INTEGER,
-		references: {
-			model: SongsModel,
-			key: 'id',
-		},
+		type: DataTypes.NUMBER,
+		references: 'songs',
 	},
 })
 
-export const syncModels = async () =>
-	Promise.all([CreatorsModel.sync(), SongsModel.sync(), LevelsModel.sync()])
+LevelModel.belongsTo(CreatorModel, { as: 'author', foreignKey: { name: 'playerId' } })
+LevelModel.belongsTo(SongModel, { as: 'song', foreignKey: { name: 'songId' } })
+
+export const syncModels = async (): Promise<any> =>
+	Promise.all([CreatorModel.sync(), SongModel.sync(), LevelModel.sync()])

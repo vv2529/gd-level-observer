@@ -4,3 +4,5 @@ build
 src/data/local
 src/config/dev.env.json
 src/config/production.env.json
+
+.vscode

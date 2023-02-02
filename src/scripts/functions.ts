@@ -1,24 +1,27 @@
 import http from 'http'
+import { GDFilter } from '../interfaces.js'
 
-export const timestamp = () => new Date().toString().slice(0, 24)
+export const timestamp = (): string => new Date().toString().slice(0, 24)
 
-export const sleep = (seconds) => {
+export const sleep = (seconds: number): Promise<any> => {
 	return new Promise((resolve) => {
 		setTimeout(resolve, seconds * 1000)
 	})
 }
 
-export const getRandomInterval = ({ period, random }) => period + (Math.random() - 0.5) * 2 * random
+export const getRandomInterval = ({ period, random }: { period: number; random: number }): number =>
+	period + (Math.random() - 0.5) * 2 * random
 
-export const tryCatch = async (f) => {
+export const tryCatch = async <T>(resolve: () => Promise<T>, fallback: T): Promise<T> => {
 	try {
-		return await f()
+		return await resolve()
 	} catch (e) {
 		console.error(e)
+		return fallback
 	}
 }
 
-export const createRequestBody = (filter) => {
+export const createRequestBody = (filter: GDFilter): string => {
 	const result = new URLSearchParams()
 
 	for (const [key, value] of Object.entries(filter)) {
@@ -28,20 +31,25 @@ export const createRequestBody = (filter) => {
 	return result.toString()
 }
 
-const _httpFetch = (url, params = {}, resolve, reject) => {
+const _httpFetch = (
+	url: string,
+	params: http.RequestOptions = {},
+	body: string,
+	resolve: (value: string) => void,
+	reject: (error?: any) => void
+): void => {
 	const urlObject = new URL(url)
-	const options = {
+	const options: http.RequestOptions = {
 		host: urlObject.host,
 		path: urlObject.pathname,
 		headers: { Accept: '*/*', 'Content-Type': 'application/x-www-form-urlencoded' },
 		...params,
 	}
-	if (options.body) delete options.body
 
-	const callback = (response) => {
-		let str = ''
+	const callback = (response: http.IncomingMessage) => {
+		let str: string = ''
 
-		response.on('data', (chunk) => {
+		response.on('data', (chunk: string) => {
 			str += chunk
 		})
 
@@ -52,14 +60,18 @@ const _httpFetch = (url, params = {}, resolve, reject) => {
 
 	const req = http.request(options, callback)
 
-	req.on('error', (e) => {
+	req.on('error', (e: Error) => {
 		reject(e)
 	})
 
-	req.write(params.body)
+	req.write(body)
 	req.end()
 }
 
-export const httpFetch = (...args) => {
-	return new Promise((resolve, reject) => _httpFetch(...args, resolve, reject))
+export const httpFetch = (
+	url: string,
+	params: http.RequestOptions = {},
+	body: string
+): Promise<string> => {
+	return new Promise((resolve, reject) => _httpFetch(url, params, body, resolve, reject))
 }
