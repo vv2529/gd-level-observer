@@ -2,7 +2,7 @@ import GDServer from './modules/GDServer.js'
 import CreatorStorage from './storage/Creators.js'
 import SongStorage from './storage/Songs.js'
 import LevelStorage from './storage/Levels.js'
-import { SavedLevel, syncModels } from './models.js'
+import { SavedCreator, SavedLevel, SavedSong, syncModels } from './models.js'
 import { Op } from 'sequelize'
 import config from './config/settings.json' assert { type: 'json' }
 import { getRandomInterval, sleep, timestamp } from './scripts/functions.js'
@@ -40,6 +40,7 @@ class LevelObserver {
 			)
 			levels.push(...result.levels)
 			await LevelObserver.checkAndSave(result.levels)
+			if (result.result !== 'success') break
 
 			if (i < batchCount - 1)
 				await sleep(getRandomInterval(config.gd_server_search.known_levels.next_page))
@@ -75,6 +76,7 @@ class LevelObserver {
 			if (noResponse) this.log('Awarded returned no levels')
 
 			await LevelObserver.checkAndSave(newLevels)
+			if (result.result !== 'success') break
 			page++
 		} while (!noResponse && allNew && page < to)
 
@@ -107,7 +109,7 @@ class LevelObserver {
 			this.log('Level update failed')
 			return
 		}
-		const [unrated, updates] = this.compare(saved, levels)
+		const [unrated, updates] = await this.compare(saved, levels)
 
 		await LevelStorage.remove(unrated.map(({ id }) => id))
 		this.nextStartingLevel()
@@ -122,7 +124,16 @@ class LevelObserver {
 		this.updateLoop()
 	}
 
-	compare(oldLevels: SavedLevel[], newLevels: Level[]): [SavedLevel[], Updates] {
+	getCPUpdateEntry(level: Level, cp: number): Level {
+		return {
+			...level,
+			author: level.author,
+			song: level.song,
+			cp,
+		}
+	}
+
+	async compare(oldLevels: SavedLevel[], newLevels: Level[]): Promise<[SavedLevel[], Updates]> {
 		const receivedIDs: number[] = newLevels.map(({ id }) => id),
 			savedObj: { [key: number]: SavedLevel } = Object.fromEntries(
 				oldLevels.map((level) => [level.id, level])
@@ -143,11 +154,9 @@ class LevelObserver {
 				'Rating changed': [],
 				'Levels moved to another account': [],
 				'Level name changed': [],
-			}
-
-		// const creatorsOfDeleted = await Promise.all(
-		// 	unrated.map((level) => CreatorStorage.getByID(level.playerID))
-		// )
+				'Level song changed': [],
+			},
+			creatorCPChanges: Level[] = []
 
 		updates['Levels unrated'] = unrated.map((level) => Level.getBasicString(level))
 
@@ -193,21 +202,45 @@ class LevelObserver {
 			}
 
 			if (levelOld.cp !== levelNew.cp) {
-				updates['Rating changed'].push(`${levelOld.cp} cp → ${Level.getBasicString(levelNew)}`)
+				updates['Rating changed'].push(
+					`${Level.getBasicString(levelNew)}: ${levelOld.cp} cp → ${levelNew.cp} cp`
+				)
+
+				creatorCPChanges.push(this.getCPUpdateEntry(levelOld, levelOld.cp - levelNew.cp))
 			}
 
 			if (levelOld.playerID !== levelNew.playerID) {
 				updates['Levels moved to another account'].push(
 					`${levelOld.author.name} → ${Level.getBasicString(levelNew)}`
 				)
+
+				creatorCPChanges.push(this.getCPUpdateEntry(levelOld, -levelNew.cp))
+				creatorCPChanges.push(this.getCPUpdateEntry(levelNew, levelNew.cp))
 			}
 
 			if (levelOld.name !== levelNew.name) {
 				updates['Level name changed'].push(`${levelOld.name} → ${Level.getBasicString(levelNew)}`)
 			}
+
+			if (levelOld.songID !== levelNew.songID) {
+				updates['Level song changed'].push(
+					`${Level.getBasicString(levelNew)}: ${Song.getBasicString(
+						levelOld.song
+					)} → ${Song.getBasicString(levelNew.song)}`
+				)
+			}
 		}
 
-		return [unrated, updates]
+		creatorCPChanges.push(...unrated.map((level): Level => this.getCPUpdateEntry(level, -level.cp)))
+		const creatorUpdates = await LevelObserver.checkSongsAndCreators(creatorCPChanges, true)
+
+		return [
+			unrated,
+			{
+				...updates,
+				...creatorUpdates,
+			},
+		]
 	}
 
 	async findStartingLevel(): Promise<void> {
@@ -243,52 +276,139 @@ class LevelObserver {
 		this.log('Next update will start from ID:', this.lastUpdatedID, `(index ${nextIndex})`)
 	}
 
-	static async checkSongsAndCreators(levels: Level[]) {
-		const newSongs = [],
-			newCreators = []
+	static cpMilestone = (from: number, to: number): number => {
+		const step = 50
+		const nearestMilestone = (Math.trunc(from / step) + 1) * step
+		return to >= nearestMilestone ? nearestMilestone : 0
+	}
 
-		await Promise.all(
-			levels.map(async (level) => {
-				const promises: [Promise<[Creator, boolean]>, Promise<[Song, boolean]>?] = [
-					CreatorStorage.add(level.author),
-				]
+	static async updateCP(cpMap: { [playerID: number]: number }) {
+		const creatorIDs: number[] = Object.keys(cpMap).map((s) => +s)
 
-				if (level.song) {
-					promises[1] = SongStorage.add(level.song)
-				}
+		const creators: SavedCreator[] = await CreatorStorage.get({
+			where: { playerID: creatorIDs },
+		})
 
-				const [authorInfo, songInfo] = await Promise.all(promises)
-				if (authorInfo[1]) newCreators.push(level.author)
-				else if (authorInfo[0].name !== level.author.name) {
-					CreatorStorage.update(level.author)
-				}
+		creators.forEach((creator) => {
+			creator.cp += cpMap[creator.playerID]
+		})
 
-				if (songInfo) {
-					if (songInfo[1]) newSongs.push(level.song)
-					const s1 = level.song,
-						s2 = songInfo[0]
-					if (s1.name !== s2.name) SongStorage.update(s1)
-					else if (s1.artistID !== s2.artistID) SongStorage.update(s1)
-					else if (s1.artist !== s2.artist) SongStorage.update(s1)
-					else if (s1.size !== s2.size) SongStorage.update(s1)
-					else if (s1.link !== s2.link) SongStorage.update(s1)
-					else if (s1.videoID !== s2.videoID) SongStorage.update(s1)
-					else if (s1.youtubeURL !== s2.youtubeURL) SongStorage.update(s1)
-					else if (s1.isVerified !== s2.isVerified) SongStorage.update(s1)
-					else if (s1.songPriority !== s2.songPriority) SongStorage.update(s1)
+		await CreatorStorage.add(creators)
+	}
+
+	static async checkSongsAndCreators(
+		levels: Level[],
+		onlyCreators: boolean = false
+	): Promise<Updates> {
+		const creatorMap: { [key: number]: Creator } = {}
+		const songMap: { [key: number]: Song } = {}
+
+		levels.forEach(({ cp, author, song }) => {
+			if (!creatorMap[author.playerID]) {
+				creatorMap[author.playerID] = { ...author }
+				creatorMap[author.playerID].cp = cp
+			} else creatorMap[author.playerID].cp += cp
+			if (song.id > 0 && !onlyCreators) songMap[song.id] = { ...song }
+		})
+
+		const creatorIDs: number[] = Object.keys(creatorMap).map((s) => +s)
+		const songIDs: number[] = Object.keys(songMap).map((s) => +s)
+		const creators: Creator[] = Object.values(creatorMap)
+		const songs: Song[] = Object.values(songMap)
+
+		const [oldCreators, oldSongs]: [SavedCreator[], SavedSong[]] = await Promise.all([
+			CreatorStorage.get({
+				where: { playerID: creatorIDs },
+			}),
+			SongStorage.get({
+				where: { id: songIDs },
+			}),
+		])
+
+		const newCreators: Creator[] = creators.filter(
+			({ playerID }) => !oldCreators.find((old) => old.playerID === playerID)
+		)
+		const newSongs: Song[] = songs.filter(({ id }) => !oldSongs.find((old) => old.id === id))
+
+		const updates: Updates = {
+			"Creator's name changed": [],
+			"Creator's accountID changed": [],
+			"Creator's milestones": newCreators
+				.filter(({ accountID }) => accountID)
+				.map((creator) => `${creator.name} - first CP!`),
+			'Song info changed': [],
+			'Songs used for the first time': newSongs.map(
+				(song) => `${song.id} - ${song.name} by ${song.artist}`
+			),
+		}
+
+		oldCreators.forEach((creator) => {
+			creatorMap[creator.playerID].cp += creator.cp
+		})
+
+		await Promise.all([CreatorStorage.add(creators), SongStorage.add(songs)])
+
+		oldCreators.forEach((oldData) => {
+			const newData = creatorMap[oldData.playerID]
+
+			if (oldData.name !== newData.name) {
+				updates["Creator's name changed"].push(`${oldData.name} → ${newData.name}`)
+			}
+
+			if (oldData.accountID !== newData.accountID) {
+				updates["Creator's accountID changed"].push(
+					`${newData.name}: ${oldData.accountID} → ${newData.accountID}`
+				)
+			}
+
+			const cpMilestone = this.cpMilestone(oldData.cp, newData.cp)
+			if (cpMilestone && newData.accountID) {
+				updates["Creator's milestones"].push(`${newData.name} - ${cpMilestone} CP!`)
+			}
+		})
+
+		oldSongs.forEach((oldData) => {
+			const newData = songMap[oldData.id]
+
+			const trackedFields: (keyof Song)[] = [
+				'name',
+				'artistID',
+				'artist',
+				'size',
+				'link',
+				'videoID',
+				'youtubeURL',
+				'isVerified',
+				'songPriority',
+			]
+
+			trackedFields.forEach((field) => {
+				if (oldData[field] !== newData[field]) {
+					updates['Song info changed'].push(
+						`${oldData.id} ${field}: ${oldData[field]} → ${newData[field]}`
+					)
 				}
 			})
-		)
+		})
+
+		// I think it would be of more value to put the first CP achievements below
+		// and the higher ones above
+		updates["Creator's milestones"] = updates["Creator's milestones"].reverse()
+
+		return updates
 	}
 
 	static async checkAndSave(levels: Level[]) {
-		await LevelObserver.checkSongsAndCreators(levels)
+		if (!levels.length) return
+		const updates = await LevelObserver.checkSongsAndCreators(levels)
+		const msg = Discord.composeMessage(updates)
+		msg ? console.log(msg) : this.log('No updates detected.')
 		await LevelStorage.add(levels)
 	}
 
 	async setup() {
-		const isSetup = await SongStorage.getByID(-1)
-		if (!isSetup?.id) {
+		const isSetup: boolean = !!(await SongStorage.getByID(-1)).id
+		if (!isSetup) {
 			this.log('Initializing...')
 			await SongStorage.setupOfficialSongs()
 			if (config.initial_load) {
@@ -322,14 +442,18 @@ class LevelObserver {
 
 	async testStart() {
 		// For use during development - put any code here
+		// await this.reset()
+		await this.setup()
+		// await this.fetchAwarded(1, 3)
+		await this.update()
 	}
 
 	async start() {
 		this.log(`Starting...`)
 
 		await syncModels()
-		// await this.testStart()
-		await this.normalStart()
+		await this.testStart()
+		// await this.normalStart()
 	}
 }
 
