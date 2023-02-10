@@ -4,33 +4,32 @@ import { FindOptions, Op } from 'sequelize'
 import Song from '../class/Song.js'
 
 export default class SongStorage {
-	static Model = SongModel
+	static readonly common: FindOptions = {}
 
-	static async add(song: Song | undefined): Promise<[Song, boolean]> {
-		if (song === undefined) return [Song.fallback, false]
-		return await tryCatch(async (): Promise<[Song, boolean]> => {
-			return await SongStorage.Model.findOrCreate({
-				where: {
-					id: song.id,
-				},
-				defaults: song,
-			})
-		}, [Song.fallback, false])
-	}
+	static async add(songs: Song[]) {
+		if (!songs.length) return
 
-	static async update(song: Song) {
 		return await tryCatch(async () => {
-			return await SongStorage.Model.update(song, {
-				where: {
-					id: song.id,
-				},
+			return await SongModel.bulkCreate(songs, {
+				updateOnDuplicate: [
+					'name',
+					'artistID',
+					'artist',
+					'size',
+					'link',
+					'videoID',
+					'youtubeURL',
+					'isVerified',
+					'songPriority',
+					'updatedAt',
+				],
 			})
-		}, [0])
+		}, null)
 	}
 
 	static async remove(id: number | number[]) {
 		await tryCatch(async () => {
-			await SongStorage.Model.destroy({
+			await SongModel.destroy({
 				where: {
 					id,
 				},
@@ -40,7 +39,7 @@ export default class SongStorage {
 
 	static async drop() {
 		await tryCatch(async () => {
-			await SongStorage.Model.destroy({
+			await SongModel.destroy({
 				where: {
 					id: {
 						[Op.gt]: -99, // essentially -Infinity
@@ -50,21 +49,30 @@ export default class SongStorage {
 		}, null)
 	}
 
-	static async getByID(id: number): Promise<Song> {
+	static async getByID(id: number) {
 		return await tryCatch(async () => {
-			return (await SongStorage.Model.findByPk(id)) || Song.fallback
+			return (await SongModel.findByPk(id, this.common)) || Song.fallback
 		}, Song.fallback)
 	}
 
-	static async get(filter: FindOptions): Promise<Song[]> {
+	static async get(filter: FindOptions) {
 		return await tryCatch(async () => {
-			return await SongStorage.Model.findAll(filter)
+			return await SongModel.findAll({
+				...filter,
+				...this.common,
+			})
 		}, [])
+	}
+
+	static async count(filter: FindOptions) {
+		return await tryCatch(async () => {
+			return await SongModel.count(filter)
+		}, 0)
 	}
 
 	static async setupOfficialSongs() {
 		await tryCatch(async () => {
-			await SongStorage.Model.bulkCreate(Song.officialSongs)
+			await SongModel.bulkCreate(Song.officialSongs)
 		}, null)
 	}
 }

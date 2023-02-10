@@ -91,7 +91,7 @@ export const LevelModel = sequelize.define<SavedLevel>('Level', {
 	verifiedCoins: DataTypes.BOOLEAN,
 	length: DataTypes.INTEGER,
 	demonDifficulty: DataTypes.INTEGER,
-	gameVersion: DataTypes.STRING,
+	gameVersion: DataTypes.INTEGER,
 	version: DataTypes.INTEGER,
 	copiedID: DataTypes.INTEGER,
 	twoPlayer: DataTypes.BOOLEAN,
@@ -103,8 +103,8 @@ export const LevelModel = sequelize.define<SavedLevel>('Level', {
 	},
 })
 
-LevelModel.belongsTo(CreatorModel, { as: 'author', foreignKey: { name: 'playerId' } })
-LevelModel.belongsTo(SongModel, { as: 'song', foreignKey: { name: 'songId' } })
+LevelModel.belongsTo(CreatorModel, { as: 'author', foreignKey: { name: 'playerID' } })
+LevelModel.belongsTo(SongModel, { as: 'song', foreignKey: { name: 'songID' } })
 
 export const syncModels = async (): Promise<any> =>
 	Promise.all([CreatorModel.sync(), SongModel.sync(), LevelModel.sync()])

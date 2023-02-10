@@ -4,33 +4,21 @@ import Creator from '../class/Creator.js'
 import { FindOptions, Op } from 'sequelize'
 
 export default class CreatorStorage {
-	static Model = CreatorModel
+	static readonly common: FindOptions = {}
 
-	static async add(creator: Creator | undefined): Promise<[Creator, boolean]> {
-		if (creator === undefined) return [Creator.fallback, false]
-		return await tryCatch(async (): Promise<[Creator, boolean]> => {
-			return await CreatorStorage.Model.findOrCreate({
-				where: {
-					playerID: creator.playerID,
-				},
-				defaults: creator,
-			})
-		}, [Creator.fallback, false])
-	}
+	static async add(creators: Creator[]) {
+		if (!creators.length) return
 
-	static async update(creator: Creator) {
 		return await tryCatch(async () => {
-			return await CreatorStorage.Model.update(creator, {
-				where: {
-					playerID: creator.playerID,
-				},
+			return await CreatorModel.bulkCreate(creators, {
+				updateOnDuplicate: ['name', 'accountID', 'updatedAt'],
 			})
-		}, [0])
+		}, null)
 	}
 
 	static async remove(playerID: number | number[]) {
 		await tryCatch(async () => {
-			await CreatorStorage.Model.destroy({
+			await CreatorModel.destroy({
 				where: {
 					playerID,
 				},
@@ -40,7 +28,7 @@ export default class CreatorStorage {
 
 	static async drop() {
 		await tryCatch(async () => {
-			await CreatorStorage.Model.destroy({
+			await CreatorModel.destroy({
 				where: {
 					playerID: {
 						[Op.gt]: -99, // essentially -Infinity
@@ -50,15 +38,24 @@ export default class CreatorStorage {
 		}, null)
 	}
 
-	static async getByID(playerID: number): Promise<Creator> {
+	static async getByID(playerID: number) {
 		return await tryCatch(async () => {
-			return (await CreatorStorage.Model.findByPk(playerID)) || Creator.fallback
+			return (await CreatorModel.findByPk(playerID, this.common)) || Creator.fallback
 		}, Creator.fallback)
 	}
 
-	static async get(filter: FindOptions): Promise<Creator[]> {
+	static async get(filter: FindOptions) {
 		return await tryCatch(async () => {
-			return await CreatorStorage.Model.findAll(filter)
+			return await CreatorModel.findAll({
+				...filter,
+				...this.common,
+			})
 		}, [])
+	}
+
+	static async count(filter: FindOptions) {
+		return await tryCatch(async () => {
+			return await CreatorModel.count(filter)
+		}, 0)
 	}
 }

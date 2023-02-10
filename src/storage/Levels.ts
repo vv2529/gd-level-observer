@@ -1,9 +1,26 @@
 import { tryCatch } from '../scripts/functions.js'
-import { LevelModel } from '../models.js'
+import { CreatorModel, LevelModel, SongModel } from '../models.js'
 import Level from '../class/Level.js'
 import { FindOptions, Op } from 'sequelize'
+import SongStorage from './Songs.js'
+import CreatorStorage from './Creators.js'
 
 export default class LevelStorage {
+	static readonly common: FindOptions = {
+		include: [
+			{
+				model: CreatorModel,
+				as: 'author',
+				attributes: CreatorStorage.common.attributes,
+			},
+			{
+				model: SongModel,
+				as: 'song',
+				attributes: SongStorage.common.attributes,
+			},
+		],
+	}
+
 	static async add(levels: Level[]) {
 		if (!levels.length) return
 
@@ -58,8 +75,15 @@ export default class LevelStorage {
 
 	static async getByID(id: number) {
 		return await tryCatch(async () => {
-			return await LevelModel.findByPk(id, {
-				include: ['author', 'song'],
+			return await LevelModel.findByPk(id, this.common)
+		}, null)
+	}
+
+	static async getOne(filter: FindOptions) {
+		return await tryCatch(async () => {
+			return await LevelModel.findOne({
+				...filter,
+				...this.common,
 			})
 		}, null)
 	}
@@ -68,17 +92,14 @@ export default class LevelStorage {
 		return await tryCatch(async () => {
 			return await LevelModel.findAll({
 				...filter,
-				include: ['author', 'song'],
+				...this.common,
 			})
 		}, [])
 	}
 
-	static async getOne(filter: FindOptions) {
+	static async count(filter: FindOptions) {
 		return await tryCatch(async () => {
-			return await LevelModel.findOne({
-				...filter,
-				include: ['author', 'song'],
-			})
-		}, null)
+			return await LevelModel.count(filter)
+		}, 0)
 	}
 }

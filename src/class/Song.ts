@@ -20,6 +20,10 @@ export default class Song {
 	}
 
 	static readonly officialSongs: Song[] = []
+
+	static getBasicString(song: Song): string {
+		return `${song.name} by ${song.artist}${song.id > 0 ? ` (${song.id})` : ''}`
+	}
 }
 
 const setupOfficialSongs = async () => {
@@ -30,7 +34,7 @@ const setupOfficialSongs = async () => {
 
 	Song.officialSongs.push(
 		...officialSongs.map(([name, artist], i) => ({
-			id: -i - 1,
+			id: ~i,
 			name,
 			artistID: -artistIDs.indexOf(artist) || 0,
 			artist,
