@@ -354,11 +354,15 @@ class LevelObserver {
 			await SongStorage.setupOfficialSongs()
 			if (config.initial_load) {
 				this.log('Loading initial levels from file...')
-				this.savedIDs = (
-					await import(`./data/local/${config.initial_load}`, {
-						assert: { type: 'json' },
-					})
-				).default
+				try {
+					this.savedIDs = (
+						await import(`./data/local/${config.initial_load}`, {
+							assert: { type: 'json' },
+						})
+					).default
+				} catch (e) {
+					this.log('Loading failed.')
+				}
 				await LevelObserver.fetchList(this.savedIDs)
 			}
 		}
